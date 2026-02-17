@@ -1,0 +1,21 @@
+package com.culina.auth.dto;
+
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+
+
+public class SignupRequest {
+
+    @Email
+    @NotBlank
+    private String email;
+
+    @NotBlank
+    private String password;
+
+    @NotBlank
+    private String name;
+
+    @NotBlank
+    private String role; // customer | chef | admin
+}

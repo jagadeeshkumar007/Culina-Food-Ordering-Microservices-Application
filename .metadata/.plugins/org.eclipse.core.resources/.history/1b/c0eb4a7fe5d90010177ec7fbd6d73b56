@@ -1,0 +1,5 @@
+package com.culina.auth.entity;
+
+public class User {
+
+}

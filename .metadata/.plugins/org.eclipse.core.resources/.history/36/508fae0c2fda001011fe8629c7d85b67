@@ -1,0 +1,5 @@
+package com.culina.auth.controller;
+
+public class AuthController {
+
+}

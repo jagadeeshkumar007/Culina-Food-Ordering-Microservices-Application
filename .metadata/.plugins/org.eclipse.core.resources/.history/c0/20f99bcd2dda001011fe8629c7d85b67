@@ -1,0 +1,5 @@
+package com.culina.auth.security;
+
+public class SecurityFilterChain {
+
+}

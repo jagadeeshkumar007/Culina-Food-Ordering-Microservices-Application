@@ -1,0 +1,174 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7
+    container_name: culina-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    container_name: culina-elasticsearch
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  postgres:
+    image: postgres:16
+    container_name: culina-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: culina-kafka
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    environment:
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_NODE_ID: 1
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+      CLUSTER_ID: X3FSm0NfSmyPF-SXSXrTtw
+
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+      KAFKA_LOG4J_ROOT_LOGLEVEL: WARN
+      KAFKA_LOG4J_LOGGERS: >
+        kafka=WARN,
+        kafka.controller=WARN,
+        kafka.server=WARN,
+        kafka.raft=WARN,
+        kafka.log=WARN,
+        kafka.network=WARN,
+        org.apache.kafka=WARN
+
+  auth-service:
+    build: ./auth-service
+    container_name: culina-auth
+    depends_on:
+      - postgres
+    ports:
+      - "8080:8080"
+    environment:
+      DB_HOST: postgres
+      DB_USER: postgres
+      DB_PASSWORD: root
+      JWT_SECRET: dGhpc2lzYXZlcnlzZWN1cmVzZWNyZXRrZXl0aGF0aXMyNTZiaXRzbG9uZ2ZvcmpXVA==
+
+  order-service:
+    build: ./order-service
+    container_name: culina-order
+    depends_on:
+      - postgres
+      - kafka
+    ports:
+      - "8081:8081"
+    environment:
+      DB_HOST: postgres
+      DB_USER: postgres
+      DB_PASSWORD: root
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SECRET: dGhpc2lzYXZlcnlzZWN1cmVzZWNyZXRrZXl0aGF0aXMyNTZiaXRzbG9uZ2ZvcmpXVA==
+
+  payment-service:
+    build: ./payment-service
+    container_name: culina-payment
+    depends_on:
+      - postgres
+      - kafka
+    ports:
+      - "8082:8082"
+    environment:
+      DB_HOST: postgres
+      DB_USER: postgres
+      DB_PASSWORD: root
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SECRET: dGhpc2lzYXZlcnlzZWN1cmVzZWNyZXRrZXl0aGF0aXMyNTZiaXRzbG9uZ2ZvcmpXVA==
+
+  cart-service:
+    build: ./cart-service
+    container_name: culina-cart
+    depends_on:
+      - redis
+      - order-service
+    ports:
+      - "8083:8083"
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SECRET: dGhpc2lzYXZlcnlzZWN1cmVzZWNyZXRrZXl0aGF0aXMyNTZiaXRzbG9uZ2ZvcmpXVA==
+
+  search-service:
+    build: ./search-service
+    container_name: culina-search
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      order-service:
+        condition: service_started
+    ports:
+      - "8084:8084"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      ELASTICSEARCH_URI: http://elasticsearch:9200
+
+  culina-frontend:
+    build: ./culina-frontend
+    container_name: culina-frontend
+    depends_on:
+      - auth-service
+      - order-service
+      - cart-service
+      - search-service
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_AUTH_SERVICE_URL: http://auth-service:8080
+      NEXT_PUBLIC_ORDER_SERVICE_URL: http://order-service:8081
+      NEXT_PUBLIC_CART_SERVICE_URL: http://cart-service:8083
+      NEXT_PUBLIC_SEARCH_SERVICE_URL: http://search-service:8084
+
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  elasticsearch-data:
+    driver: local
+  kafka-data:
+    driver: local
