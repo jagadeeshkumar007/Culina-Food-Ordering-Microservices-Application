@@ -8,7 +8,7 @@ export default function SearchPage() {
   return (
     <div className="min-h-screen bg-gray-100">
       <UserNavbar />
-      <Suspense fallback={<p className="text-center py-10 text-gray-500">Searching dishes…</p>}>
+      <Suspense fallback={<div className="text-center p-8 text-gray-600">Loading search results...</div>}>
         <SearchContent />
       </Suspense>
     </div>
